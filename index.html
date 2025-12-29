@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UA AI Assistant</title>
+    
+    <link rel="icon" href="assets/ua.png" type="image/png">
+    
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-main: #0d1117;
+            --bg-card: #161b22;
+            --nav-width: 64px;
+            --border-color: #30363d;
+            --text-main: #c9d1d9;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --success: #3fb950;
+            --warning: #d29922;
+            --danger: #f85149;
+        }
+
+        /* --- GLOBAL & UTILS --- */
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-main); color: var(--text-main); margin: 0; overflow: hidden; }
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 5px; }
+        ::-webkit-scrollbar-track { background: var(--bg-main); }
+
+        /* --- LAYOUT --- */
+        .main-wrapper { display: flex; width: 100vw; height: 100vh; overflow: hidden; }
+        
+        .nav-sidebar {
+            width: var(--nav-width); height: 100vh; background: #010409;
+            border-right: 1px solid var(--border-color); display: flex; flex-direction: column;
+            align-items: center; padding-top: 20px; flex-shrink: 0; z-index: 50;
+        }
+        .nav-item {
+            width: 40px; height: 40px; border-radius: 8px; color: var(--text-muted);
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            transition: all 0.2s; margin-bottom: 16px; position: relative;
+        }
+        .nav-item:hover, .nav-item.active { background: #21262d; color: var(--accent); }
+        .nav-tooltip {
+            position: absolute; left: 50px; background: #30363d; color: white;
+            padding: 4px 8px; border-radius: 4px; font-size: 12px; opacity: 0;
+            pointer-events: none; transition: opacity 0.2s; white-space: nowrap; z-index: 60;
+        }
+        .nav-item:hover .nav-tooltip { opacity: 1; }
+
+        .content-wrapper { flex: 1; display: flex; min-width: 0; position: relative; }
+        .chat-section { flex: 1; display: flex; flex-direction: column; min-width: 0; transition: all 0.4s ease; }
+
+        /* --- KNOWLEDGE BASE MODAL --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(5px);
+            z-index: 100; display: flex; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+        }
+        .modal-overlay.open { opacity: 1; pointer-events: all; }
+        .kb-modal {
+            width: 1100px; height: 85vh; max-width: 95vw;
+            background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6); display: flex; flex-direction: column;
+            transform: scale(0.95); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .modal-overlay.open .kb-modal { transform: scale(1); }
+        .kb-header { padding: 20px 24px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: #161b22; }
+        .kb-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+        .kb-grid { display: grid; grid-template-columns: 400px 1fr; height: 100%; overflow: hidden; }
+        .kb-col-left { padding: 24px; border-right: 1px solid var(--border-color); background: rgba(13, 17, 23, 0.3); display: flex; flex-direction: column; overflow-y: auto; }
+        .kb-col-right { padding: 24px; background: var(--bg-main); display: flex; flex-direction: column; overflow-y: auto; }
+        
+        .upload-zone { border: 2px dashed var(--border-color); border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s ease; background: rgba(13, 17, 23, 0.5); margin-bottom: 20px; }
+        .upload-zone:hover { border-color: var(--accent); background: rgba(88, 166, 255, 0.05); }
+        .upload-zone.drag-active { border-color: var(--success); background-color: rgba(63, 185, 80, 0.1); transform: scale(1.02); }
+        .section-title { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; }
+        .file-item { background: var(--bg-card); border: 1px solid var(--border-color); padding: 12px; border-radius: 6px; margin-bottom: 8px; position: relative; }
+        .progress-container { height: 4px; background: #30363d; border-radius: 2px; margin-top: 8px; overflow: hidden; display: none; }
+        .progress-container.active { display: block; }
+        .progress-bar { height: 100%; width: 0%; transition: width 0.2s ease; border-radius: 2px; }
+        .progress-bar.uploading { background: var(--accent); }
+        .progress-bar.indexing { background: var(--warning); }
+        .progress-bar.completed { background: var(--success); }
+        .btn-primary { background: var(--success); color: white; border: none; padding: 10px; width: 100%; border-radius: 6px; font-weight: 600; cursor: pointer; margin-top: 10px; transition: background 0.2s; display: flex; justify-content: center; align-items: center; gap: 8px; }
+        .btn-primary:hover { background: #2ea043; }
+        .btn-primary:disabled { background: #30363d; color: #8b949e; cursor: not-allowed; }
+
+        /* --- CHAT STYLES --- */
+        #chat-window { flex-grow: 1; overflow-y: auto; scroll-behavior: smooth; padding: 2rem 1rem; display: flex; flex-direction: column; align-items: center; }
+        
+        .input-area { padding: 20px; background: var(--bg-main); border-top: 1px solid var(--border-color); display: flex; justify-content: center; }
+        .input-box { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; display: flex; align-items: center; padding: 12px 16px; width: 100%; max-width: 900px; gap: 12px; }
+        input { background: transparent; border: none; outline: none; color: white; flex-grow: 1; font-size: 15px; }
+        
+        .message-row { width: 100%; max-width: 900px; display: flex; margin-bottom: 24px; }
+        .message-row.user { justify-content: flex-end; }
+        .message-row.bot { justify-content: flex-start; flex-direction: column; }
+
+        .message-user { background-color: #21262d; border: 1px solid var(--border-color); border-radius: 12px; padding: 10px 16px; max-width: 85%; }
+
+        /* Thought Process */
+        .thought-container { 
+            width: 100%; margin-top: 5px; margin-bottom: 16px; 
+            background: rgba(22, 27, 34, 0.6); backdrop-filter: blur(12px); 
+            border: 1px solid rgba(48, 54, 61, 0.6); border-radius: 12px; 
+            display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3); 
+        }
+        .thought-header-bar { background: rgba(48, 54, 61, 0.3); padding: 12px 16px; font-size: 11px; text-transform: uppercase; font-weight: 700; color: var(--text-main); border-bottom: 1px solid rgba(48, 54, 61, 0.4); display: flex; justify-content: space-between; align-items: center; }
+        
+        .process-status { display: flex; align-items: center; gap: 8px; color: var(--accent); font-weight: 600; font-size: 11px; opacity: 0; transition: opacity 0.3s ease; }
+        .process-status.active { opacity: 1; }
+        
+        .thought-box { max-height: 300px; overflow-y: auto; padding: 24px 20px; transition: max-height 0.6s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease; background: transparent; scrollbar-width: none; scroll-behavior: smooth; }
+        .thought-box::-webkit-scrollbar { display: none; }
+        .thought-box.compact { max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; overflow: hidden; }
+        .thought-box.expanded { max-height: 1200px; }
+        
+        #stepsContainer { border-left: 2px solid rgba(48, 54, 61, 0.5); margin-left: 10px; padding-left: 24px; padding-top: 5px; padding-bottom: 10px; }
+        .step-item { position: relative; margin-bottom: 32px; }
+        
+        /* Node Styles (Circle) */
+        .step-node { position: absolute; left: -31px; top: 0; width: 12px; height: 12px; background: #0d1117; border: 2px solid #30363d; border-radius: 50%; display: flex; justify-content: center; align-items: center; z-index: 2; font-size: 10px; font-weight: bold; }
+        
+        /* Step Status Colors */
+        .step-item.active .step-node { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+        .step-item.completed .step-node { border-color: var(--success); background: var(--success); color: #0d1117; }
+        .step-item.warning .step-node { border-color: var(--warning); background: var(--bg-main); color: var(--warning); box-shadow: 0 0 5px rgba(210, 153, 34, 0.4); }
+        .step-item.warning .step-title { color: var(--warning); }
+
+        .step-title { font-size: 14px; font-weight: 600; color: #f0f6fc; margin-bottom: 8px; line-height: 1.4; }
+        .step-content { background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; border: 1px solid rgba(48,54,61,0.4); display: none; margin-top: 8px; font-size: 13.5px; color: #8b949e; }
+        
+        .step-content strong { color: var(--accent); font-weight: 700; background: rgba(88, 166, 255, 0.1); padding: 0px 4px; border-radius: 4px; }
+
+        @keyframes smooth-press {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.4); }
+            40% { transform: scale(0.92); box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.4); } 
+            100% { transform: scale(1); box-shadow: 0 0 0 12px rgba(88, 166, 255, 0); } 
+        }
+        
+        .pdf-link-animated { display: inline-block; transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94); border-radius: 4px; color: var(--accent); text-decoration: none; cursor: pointer; padding: 0 4px; backface-visibility: hidden; }
+        .pdf-link-animated:hover { transform: translateY(-1px); color: #ffffff; text-shadow: 0 0 10px rgba(88, 166, 255, 0.6); background: rgba(88, 166, 255, 0.1); }
+        .pdf-link-animated.clicked { animation: smooth-press 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; color: var(--success) !important; background: rgba(63, 185, 80, 0.2); }
+        
+        .expand-footer { background: rgba(48, 54, 61, 0.2); border-top: 1px solid rgba(48, 54, 61, 0.4); text-align: center; padding: 10px; cursor: pointer; color: var(--accent); font-size: 12px; font-weight: 600; transition: background 0.2s; }
+        .expand-footer:hover { background: rgba(48, 54, 61, 0.5); }
+
+        /* --- FINAL ANSWER FORMATTING --- */
+        .final-answer { width: 100%; padding-top: 10px; color: #e6edf3; line-height: 1.75; font-size: 16px; }
+        .final-answer h1 { font-size: 1.8em; border-bottom: 1px solid #30363d; padding-bottom: 0.3em; margin-top: 24px; margin-bottom: 16px; font-weight: 600; color: #ffffff; }
+        .final-answer h2 { font-size: 1.5em; border-bottom: 1px solid #30363d; padding-bottom: 0.3em; margin-top: 24px; margin-bottom: 16px; font-weight: 600; color: #ffffff; }
+        .final-answer h3 { font-size: 1.25em; margin-top: 24px; margin-bottom: 16px; font-weight: 600; color: #ffffff; }
+        .final-answer p { margin-bottom: 16px; }
+        .final-answer strong { color: #fff; font-weight: 600; }
+        .final-answer ul { list-style-type: disc; padding-left: 2em; margin-bottom: 16px; }
+        .final-answer ol { list-style-type: decimal; padding-left: 2em; margin-bottom: 16px; }
+        .final-answer blockquote { border-left: 0.25em solid #30363d; color: #8b949e; padding-left: 1em; margin-bottom: 16px; }
+        .final-answer code { padding: 0.2em 0.4em; font-size: 85%; background-color: rgba(110,118,129,0.4); border-radius: 6px; font-family: 'JetBrains Mono', monospace; }
+        .final-answer pre { padding: 16px; overflow: auto; font-size: 85%; background-color: #161b22; border-radius: 6px; margin-bottom: 16px; }
+        .final-answer pre code { background-color: transparent; padding: 0; }
+        .final-answer table { display: block; width: 100%; overflow: auto; margin-bottom: 16px; border-spacing: 0; border-collapse: collapse; }
+        .final-answer table th, .final-answer table td { padding: 6px 13px; border: 1px solid #30363d; }
+        .final-answer table th { font-weight: 600; background-color: #161b22; color: #f0f6fc; }
+        .final-answer table tr:nth-child(2n) { background-color: #0d1117; }
+
+        /* PDF & Resizer */
+        #pdf-sidebar { 
+            width: 0; background: #000; border-left: 1px solid var(--border-color); 
+            display: flex; flex-direction: column; overflow: hidden; 
+            transition: width 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        #pdf-sidebar.active { width: 50vw; }
+        .pdf-header { height: 48px; background: var(--bg-card); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; }
+        #pdf-frame { flex-grow: 1; width: 100%; height: 100%; border: none; background: #fff; }
+        #dragbar { width: 12px; cursor: col-resize; background: transparent; display: block; z-index: 30; }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { width: 14px; height: 14px; border: 2px solid transparent; border-top-color: var(--bg-main); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        .spinner-status { width: 14px; height: 14px; border: 2px solid rgba(88, 166, 255, 0.1); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; background: transparent; }
+        .check-icon { color: var(--bg-main); font-size: 10px; font-weight: bold; }
+
+        /* --- TOGGLE SWITCH --- */
+        .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #30363d; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: #8b949e; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #1f6feb; }
+        input:checked + .slider:before { transform: translateX(20px); background-color: white; }
+        .toggle-label { font-size: 12px; color: var(--text-muted); font-weight: 600; margin-right: 8px; }
+        .toggle-container { display: flex; align-items: center; border-right: 1px solid var(--border-color); padding-right: 12px; margin-right: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="main-wrapper">
+    <nav class="nav-sidebar">
+        <div class="nav-item mb-6" title="Menu"><svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"></path></svg></div>
+        
+        <div class="nav-item" onclick="KBManager.openModal()"><svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg><div class="nav-tooltip">My Knowledge Base</div></div>
+    </nav>
+
+    <div class="content-wrapper">
+        <div class="chat-section">
+            <header class="p-4 border-b border-[#30363d] flex justify-center relative">
+                <div class="flex items-center gap-2">
+                    <img src="assets/ua.png" 
+                        alt="UA Logo" 
+                        class="h-10 w-auto animate-pulse">
+                    <span class="font-semibold text-sm text-gray-200">AI Assistant</span>
+                </div>
+                <button onclick="ChatUI.clearHistory()" class="absolute right-6 top-5 text-gray-500 hover:text-red-400 transition" title="Clear Chat History">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+            </header>
+            <div id="chat-window"></div>
+            <div class="input-area">
+                <div class="input-box">
+                    <div class="toggle-container">
+                        <span class="toggle-label">RAG</span>
+                        <label class="toggle-switch" title="Toggle Retrieval Augmented Generation">
+                            <input type="checkbox" id="ragToggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    
+                    <input type="text" id="userInput" placeholder="Ask a question about your documents...">
+                    <button onclick="ChatUI.sendMessage()" class="text-gray-400 hover:text-blue-400 transition">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 2L11 13M22 2L15 22L11 13L2 9L22 2z"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div id="dragbar" title="Drag to open/resize document viewer"></div>
+        <div id="pdf-sidebar" data-default-width="50vw">
+            <div class="pdf-header"><span class="text-sm font-semibold text-gray-300">Document Viewer</span><button class="text-gray-400 hover:text-white" onclick="PDFViewer.close()">×</button></div>
+            <iframe id="pdf-frame" src=""></iframe>
+        </div>
+    </div>
+</div>
+
+<div id="kb-modal-overlay" class="modal-overlay" onclick="KBManager.closeModal(event)">
+    <div class="kb-modal">
+        <div class="kb-header">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-blue-500/20 rounded-lg text-blue-400"><svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg></div>
+                <div><h3 class="text-lg font-semibold text-white">Knowledge Base Manager</h3><p class="text-xs text-gray-400">Ingest, Index, and Manage Documents</p></div>
+            </div>
+            <button class="text-gray-400 hover:text-white" onclick="KBManager.closeModal(null, true)"><svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        </div>
+        <div class="kb-body">
+            <div class="kb-grid">
+                <div class="kb-col-left">
+                    <div class="section-title">1. Add Documents</div>
+                    <div class="upload-zone" onclick="document.getElementById('file-upload').click()">
+                        <input type="file" id="file-upload" multiple style="display:none" onchange="KBManager.handleFileSelect(this.files)">
+                        <svg class="mx-auto text-gray-400 mb-2" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                        <div class="text-sm text-gray-300 font-medium">Click or Drag Files Here</div>
+                    </div>
+                    <div class="section-title mt-4">Pending Indexing (<span id="pending-count">0</span>)</div>
+                    <div id="pending-list" class="flex-1 overflow-y-auto min-h-[100px] mb-4"><div class="text-xs text-gray-500 italic text-center mt-4">No files waiting to be indexed.</div></div>
+                    <button id="btn-index" class="btn-primary" onclick="KBManager.startIndexing()" disabled><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>Start Indexing</button>
+                </div>
+                <div class="kb-col-right">
+                    <div class="flex justify-between items-center mb-4"><div class="section-title mb-0">2. Indexed Library (<span id="indexed-count">0</span>)</div><button class="text-xs text-blue-400 hover:underline" onclick="KBManager.fetchFiles()">Refresh List</button></div>
+                    <div id="kb-file-list" class="file-list flex-1"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const DOM = {
+        chatWindow: document.getElementById('chat-window'),
+        userInput: document.getElementById('userInput'),
+        pdfSidebar: document.getElementById('pdf-sidebar'),
+        pdfFrame: document.getElementById('pdf-frame'),
+        dragbar: document.getElementById('dragbar'),
+        kbModal: document.getElementById('kb-modal-overlay'),
+        ragToggle: document.getElementById('ragToggle')
+    };
+
+    // const PDF_LINK_REGEX = /\[\s*([^\]]+?)\s*\]\s*\(\s*([^\)]+?\.pdf(?:\/\d+)?)\s*\)/gi;
+    const PDF_LINK_REGEX = /(?:\[|【)\s*([^\]】]+?)\s*(?:\]|】)\s*\(\s*([^\)]+?\.pdf(?:\/\d+)?)\s*\)/gi;
+    const HISTORY_KEY = 'ua_assistant_history_v1';
+
+    // --- KB MANAGER ---
+    const KBManager = {
+        files: [], pendingFiles: [], isIndexing: false,
+        init() { this.fetchFiles(); this.setupDragDrop(); this.syncWithServer(); },
+        setupDragDrop() {
+            const dropArea = document.querySelector('.upload-zone');
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => { dropArea.addEventListener(e, ev => { ev.preventDefault(); ev.stopPropagation(); }, false); document.body.addEventListener(e, ev => { ev.preventDefault(); ev.stopPropagation(); }, false); });
+            ['dragenter', 'dragover'].forEach(e => dropArea.addEventListener(e, () => dropArea.classList.add('drag-active'), false));
+            ['dragleave', 'drop'].forEach(e => dropArea.addEventListener(e, () => dropArea.classList.remove('drag-active'), false));
+            dropArea.addEventListener('drop', e => { this.handleFileSelect(e.dataTransfer.files); }, false);
+        },
+        openModal() { DOM.kbModal.classList.add('open'); this.fetchFiles(); },
+        closeModal(event, force) { if (force || event.target === DOM.kbModal) DOM.kbModal.classList.remove('open'); },
+        async syncWithServer() {
+            try {
+                const res = await fetch('/indexing-status'); const states = await res.json();
+                let restoredCount = 0;
+                for (const [filename, data] of Object.entries(states)) {
+                    if (['queued', 'uploading', 'indexing'].includes(data.status)) {
+                        const item = { name: filename, size: 'Processing...', progress: data.progress || 0, status: data.status, fileObject: null };
+                        this.pendingFiles.push(item); restoredCount++;
+                        this.pollStatus(item).then(() => { item.status = 'done'; item.progress = 100; this.renderPendingList(); this.fetchFiles(); setTimeout(() => { const idx = this.pendingFiles.indexOf(item); if (idx > -1) { this.pendingFiles.splice(idx, 1); this.renderPendingList(); } }, 1000); }).catch(() => { item.status = 'error'; this.renderPendingList(); });
+                    }
+                }
+                if (restoredCount > 0) { this.renderPendingList(); this.isIndexing = true; }
+            } catch (e) { console.error(e); }
+        },
+        handleFileSelect(fileList) {
+            if (!fileList || !fileList.length) return;
+            Array.from(fileList).forEach(file => { if (!this.pendingFiles.some(f => f.name === file.name)) this.pendingFiles.push({ fileObject: file, name: file.name, size: (file.size / 1024 / 1024).toFixed(2) + ' MB', progress: 0, status: 'waiting' }); });
+            this.renderPendingList();
+        },
+        async removeFromPending(index) {
+            const item = this.pendingFiles[index]; item._cancelled = true;
+            if (item.status === 'waiting') { this.pendingFiles.splice(index, 1); this.renderPendingList(); }
+            else {
+                if(!confirm("Cancel process and delete file?")) { item._cancelled = false; return; }
+                this.pendingFiles.splice(index, 1); this.renderPendingList();
+                try { await fetch(`/files/${encodeURIComponent(item.name)}`, { method: 'DELETE' }); } catch (e) { console.error(e); }
+                await this.fetchFiles();
+            }
+        },
+        renderPendingList() {
+            const container = document.getElementById('pending-list');
+            const countSpan = document.getElementById('pending-count');
+            const btn = document.getElementById('btn-index');
+            countSpan.innerText = this.pendingFiles.length;
+            const hasActiveProcess = this.pendingFiles.some(f => ['uploading', 'indexing', 'queued'].includes(f.status));
+            btn.disabled = this.pendingFiles.length === 0 || (this.isIndexing && hasActiveProcess);
+            container.innerHTML = '';
+            if (this.pendingFiles.length === 0) { container.innerHTML = `<div class="text-xs text-gray-500 italic text-center mt-10">No files waiting.<br>Drag files here.</div>`; return; }
+            this.pendingFiles.forEach((item, index) => {
+                const el = document.createElement('div'); el.className = 'file-item';
+                let statusColor = 'text-gray-500'; if(item.status === 'uploading') statusColor = 'text-blue-400'; if(item.status === 'indexing') statusColor = 'text-orange-400'; if(item.status === 'done') statusColor = 'text-green-400'; if(item.status === 'error') statusColor = 'text-red-400';
+                let barClass = "uploading"; if (item.status === 'indexing') barClass = "indexing"; if (item.status === 'done') barClass = "completed";
+                el.innerHTML = `<div class="flex justify-between items-start mb-1 pr-6"><div class="text-sm font-medium text-gray-200 truncate w-40" title="${item.name}">${item.name}</div><div class="text-xs ${statusColor} capitalize" id="status-${index}">${item.status}</div></div><div class="flex justify-between text-xs text-gray-500 mb-2"><span>${item.size}</span><span id="pct-${index}">${item.progress}%</span></div><div class="progress-container ${item.progress > 0 ? 'active' : ''}"><div class="progress-bar ${barClass}" style="width: ${item.progress}%"></div></div><div class="absolute top-2 right-2 cursor-pointer text-gray-600 hover:text-red-500 transition-colors p-1" onclick="KBManager.removeFromPending(${index})" title="Remove"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></div>`;
+                container.appendChild(el);
+            });
+        },
+        async startIndexing() {
+            const waitingFiles = this.pendingFiles.filter(f => f.status === 'waiting');
+            if (waitingFiles.length === 0) return;
+
+            this.isIndexing = true; 
+            this.renderPendingList();
+
+            for (const item of waitingFiles) {
+                item.status = 'uploading'; 
+                item.progress = 0; 
+                this.renderPendingList();
+
+                try {
+                    await this.uploadFileWithProgress(item);
+                    item.status = 'queued';
+                    this.renderPendingList();
+
+                    this.pollStatus(item).then(async () => {
+                        item.status = 'done'; 
+                        item.progress = 100; 
+                        this.renderPendingList();
+                        await this.fetchFiles();
+                        await new Promise(r => setTimeout(r, 1000));
+                        const removeIdx = this.pendingFiles.indexOf(item);
+                        if (removeIdx > -1) this.pendingFiles.splice(removeIdx, 1);
+                        this.renderPendingList();
+                    }).catch(() => {
+                        item.status = 'error';
+                        this.renderPendingList();
+                    });
+
+                } catch (error) { 
+                    console.error(error); 
+                    item.status = 'error'; 
+                    this.renderPendingList(); 
+                }
+            }
+            this.isIndexing = false;
+            this.renderPendingList();
+        },
+        uploadFileWithProgress(item) {
+            return new Promise((resolve, reject) => {
+                const formData = new FormData(); formData.append('files', item.fileObject);
+                const xhr = new XMLHttpRequest(); xhr.open('POST', '/upload', true);
+                xhr.upload.onprogress = (e) => { if (e.lengthComputable) { item.progress = Math.round((e.loaded / e.total) * 100); this.renderPendingList(); } };
+                xhr.onload = () => { if (xhr.status === 200) resolve(); else reject("Upload Error"); };
+                xhr.onerror = () => reject("Network Error"); xhr.send(formData);
+            });
+        },
+        async pollStatus(item) {
+            return new Promise((resolve, reject) => {
+                const interval = setInterval(async () => {
+                    if (item._cancelled) { clearInterval(interval); reject("Cancelled"); return; }
+                    try {
+                        const res = await fetch(`/indexing-status?filename=${encodeURIComponent(item.name)}`);
+                        const data = await res.json();
+                        
+                        if (data.status) {
+                            if (item.status !== data.status) { item.status = data.status; this.renderPendingList(); }
+                            if (data.progress !== undefined && item.progress !== data.progress) { item.progress = data.progress; this.renderPendingList(); }
+                            if (data.status === 'done') { clearInterval(interval); resolve(); } 
+                            else if (data.status === 'error') { clearInterval(interval); reject("Error"); }
+                        } else { clearInterval(interval); reject("Lost"); }
+                    } catch (e) { console.error(e); }
+                }, 1000);
+            });
+        },
+        async fetchFiles() {
+            try {
+                const response = await fetch('/files'); if (!response.ok) throw new Error('Error');
+                this.files = await response.json(); this.renderIndexedList();
+            } catch (e) { console.error(e); }
+        },
+        renderIndexedList() {
+            const listEl = document.getElementById('kb-file-list'); document.getElementById('indexed-count').innerText = this.files.length;
+            listEl.innerHTML = ''; if (this.files.length === 0) { listEl.innerHTML = '<div class="text-center text-gray-500 py-4 text-xs">Library is empty.</div>'; return; }
+            this.files.forEach(file => {
+                const div = document.createElement('div'); div.className = 'file-item flex justify-between items-center';
+                div.innerHTML = `<div class="flex items-center gap-3 overflow-hidden"><div class="text-green-500"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div><div class="truncate"><div class="text-sm text-gray-200 truncate w-48" title="${file.name}">${file.name}</div><div class="text-xs text-gray-500">${file.size} • ${file.date}</div></div></div><button class="text-gray-500 hover:text-red-400 p-2" onclick="KBManager.removeFile('${file.name}')" title="Delete"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>`;
+                listEl.appendChild(div);
+            });
+        },
+        async removeFile(filename) { if(!confirm(`Remove "${filename}"?`)) return; try { await fetch(`/files/${encodeURIComponent(filename)}`, { method: 'DELETE' }); this.fetchFiles(); } catch (e) { alert("Error"); } }
+    };
+
+    // --- MARKDOWN & PDF LINKS ---
+    const MarkdownUtils = {
+        init() {
+            marked.use({ renderer: { link(href, title, text) { 
+                // Garante que obtemos o URL limpo (compatível com várias versões do marked)
+                let cleanHref = (typeof href === 'object' && href !== null) ? href.href : href; 
+                cleanHref = cleanHref ? cleanHref.toString().trim() : ''; 
+                
+                // --- CORREÇÃO AQUI ---
+                // Se 'text' for null/undefined (comum em autolinks <url>), usamos o próprio href
+                const linkText = text || cleanHref;
+
+                // Lógica para detetar PDFs
+                if (/(\.pdf)(\/(\d+))?(\?.*)?(#.*)?$/i.test(cleanHref)) { 
+                    let pdfUrl = cleanHref;
+                    let pageNum = 1;
+                    const matches = cleanHref.match(/(.*\.pdf)\/(\d+)$/i);
+                    if (matches) { pdfUrl = matches[1]; pageNum = matches[2]; }
+                    const filenameOnly = pdfUrl.split(/[/\\]/).pop();
+                    return `<span class="pdf-link-animated" style="cursor:pointer" onclick="PDFViewer.open('${filenameOnly.replace(/'/g,"\\'")}',${pageNum}, this)">🔗</span>`; 
+                } 
+                
+                // Renderização normal de link
+                return `<a href="${cleanHref}" target="_blank" class="text-blue-400 hover:underline">${linkText}</a>`; 
+            }}});
+        },
+        renderContent(text, containerElement) { 
+            try { 
+                // Processa primeiro os links de PDF com a regex
+                const pre = text.replace(PDF_LINK_REGEX, (m, t, h) => { 
+                    let url = h.trim(), page = 1; 
+                    const match = url.match(/(.*\.pdf)\/(\d+)$/i); 
+                    if(match){ url = match[1]; page = match[2]; } 
+                    const filenameOnly = url.split(/[/\\]/).pop(); 
+                    return `<span class="pdf-link-animated" style="cursor:pointer" onclick="PDFViewer.open('${filenameOnly.replace(/'/g,"\\'")}',${page}, this)">🔗</span>`; 
+                }); 
+                
+                // Renderiza o Markdown final
+                containerElement.innerHTML = marked.parse(pre); 
+                
+                if (window.renderMathInElement) renderMathInElement(containerElement, {delimiters: [{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]}); 
+            } catch (e) { 
+                containerElement.textContent = text; 
+            } 
+        }
+    };
+
+    // --- PDF VIEWER ---
+    const PDFViewer = {
+        open(url, page, element) { 
+            if(element) { element.classList.add('clicked'); setTimeout(() => element.classList.remove('clicked'), 600); }
+            let filename = url;
+            if (filename.includes('/') || filename.includes('\\')) { filename = filename.split(/[/\\]/).pop(); }
+            const finalUrl = `/docs/${filename}#page=${page}`; 
+            console.log("Loading PDF from:", finalUrl);
+            DOM.pdfSidebar.classList.add('active'); 
+            if (!DOM.pdfSidebar.style.width || DOM.pdfSidebar.style.width === '0px') { DOM.pdfSidebar.style.width = DOM.pdfSidebar.getAttribute('data-default-width'); }
+            DOM.pdfFrame.setAttribute('src', finalUrl); 
+        },
+        close() { DOM.pdfSidebar.classList.remove('active'); DOM.pdfSidebar.style.width = '0'; DOM.pdfFrame.setAttribute('src', ''); }
+    };
+
+    // --- CHAT LOGIC ---
+    const ChatUI = {
+        async init() {
+            try {
+                // 1. Pergunta ao servidor qual é o ID de arranque atual
+                const response = await fetch('/boot-id');
+                if (response.ok) {
+                    const data = await response.json();
+                    const serverId = data.boot_id;
+                    
+                    // 2. Compara com o ID que temos guardado
+                    const savedId = localStorage.getItem('ua_server_boot_id');
+
+                    // 3. Se forem diferentes, o servidor reiniciou! Apaga tudo.
+                    if (serverId !== savedId) {
+                        console.log("Servidor reiniciado. A limpar histórico...");
+                        localStorage.removeItem(HISTORY_KEY); // Remove o histórico do chat
+                        localStorage.setItem('ua_server_boot_id', serverId); // Guarda o novo ID
+                    }
+                }
+            } catch (e) {
+                console.warn("Não foi possível verificar o status do servidor (pode estar offline).");
+            }
+
+            // 4. Carrega o histórico (se não foi apagado, carrega o antigo; se foi, começa do zero)
+            this.loadHistory();
+        },
+        toggleThought(btn) {
+            const box = btn.parentElement.querySelector('.thought-box');
+            if (box.classList.contains('expanded')) { box.classList.remove('expanded'); box.classList.add('compact'); btn.innerText = 'Expand Full Thought Process'; }
+            else { box.classList.remove('compact'); box.classList.add('expanded'); btn.innerText = 'Collapse Thought Process'; }
+        },
+        createStep(id, text) {
+             const d = document.createElement('div'); d.className = `step-item active`; id ? d.id = id : null;
+             d.innerHTML = `<div class="step-node"><div class="spinner"></div></div><div class="step-title">${text}</div><div class="step-content"></div>`;
+             return d;
+        },
+        // --- HISTORY MANAGEMENT ---
+        saveToHistory(entry) {
+            const history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+            history.push(entry);
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+        },
+        loadHistory() {
+            const history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+            history.forEach(item => {
+                if (item.type === 'user') {
+                    DOM.chatWindow.innerHTML += `<div class="message-row user"><div class="message-user">${item.content}</div></div>`;
+                } else if (item.type === 'bot') {
+                    const botRow = document.createElement('div');
+                    botRow.className = 'message-row bot';
+                    
+                    // Reconstruct Thought Container ONLY if reasoning exists (RAG ON)
+                    if (item.reasoning) {
+                        const cont = document.createElement('div'); 
+                        cont.className = 'thought-container';
+                        cont.innerHTML = `
+                            <div class="thought-header-bar">
+                                <div class="flex items-center gap-2">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e3b341" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+                                    Reasoning Log (History)
+                                </div>
+                            </div>
+                            <div class="thought-box compact" id="globalLog"><div id="stepsContainer">${item.reasoning}</div></div>
+                            <div class="expand-footer" onclick="ChatUI.toggleThought(this)">Expand Full Thought Process</div>`;
+                        botRow.appendChild(cont);
+                    }
+                    
+                    if (item.answer) {
+                        const f = document.createElement('div'); f.className = 'final-answer';
+                        MarkdownUtils.renderContent(item.answer, f);
+                        botRow.appendChild(f);
+                    }
+                    DOM.chatWindow.appendChild(botRow);
+                }
+            });
+            setTimeout(() => { DOM.chatWindow.scrollTop = DOM.chatWindow.scrollHeight; }, 100);
+        },
+        clearHistory() {
+            if(confirm("Clear chat history?")) {
+                localStorage.removeItem(HISTORY_KEY);
+                DOM.chatWindow.innerHTML = '';
+            }
+        },
+        async sendMessage() {
+            const q = DOM.userInput.value.trim(); if(!q) return;
+            const useRag = DOM.ragToggle.checked;
+            
+            // Save User Message
+            this.saveToHistory({ type: 'user', content: q });
+            
+            DOM.chatWindow.innerHTML += `<div class="message-row user"><div class="message-user">${q}</div></div>`;
+            DOM.userInput.value = '';
+            
+            const botRow = document.createElement('div');
+            botRow.className = 'message-row bot';
+            DOM.chatWindow.appendChild(botRow);
+            setTimeout(() => { DOM.chatWindow.scrollTop = DOM.chatWindow.scrollHeight; }, 10);
+
+            // Container Structure - APENAS SE O RAG ESTIVER LIGADO
+            let cont = null;
+            let stepsContainer = null;
+            let thoughtBox = null;
+            let statusEl = null;
+            let stepsElements = {};
+
+            if (useRag) {
+                cont = document.createElement('div'); 
+                cont.className = 'thought-container';
+                cont.innerHTML = `
+                    <div class="thought-header-bar">
+                        <div class="flex items-center gap-2">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e3b341" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+                            Live Reasoning Log
+                        </div>
+                        <div class="process-status active"><div class="spinner-status"></div>Thinking...</div>
+                    </div>
+                    <div class="thought-box" id="globalLog"><div id="stepsContainer"></div></div>
+                    <div class="expand-footer" onclick="ChatUI.toggleThought(this)">Expand</div>`;
+                
+                botRow.appendChild(cont);
+                
+                stepsContainer = cont.querySelector('#stepsContainer');
+                thoughtBox = cont.querySelector('.thought-box');
+                statusEl = cont.querySelector('.process-status');
+            }
+
+            // Pass Toggle State to Backend
+            const es = new EventSource(`/ask/stream?message=${encodeURIComponent(q)}&use_rag=${useRag}`);
+            
+            es.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'error') {
+                    es.close();
+                    if(statusEl) {
+                        statusEl.innerHTML = `<span style="color:var(--danger)">Error: ${data.error}</span>`;
+                        statusEl.classList.remove('active');
+                    } else {
+                        // Se não houver UI de status (sem RAG), mostramos erro como mensagem final
+                        const f = document.createElement('div'); f.className = 'final-answer';
+                        f.innerHTML = `<span style="color:var(--danger)">Error: ${data.error}</span>`;
+                        botRow.appendChild(f);
+                    }
+                    return;
+                }
+
+                if (data.type === 'status') {
+                    const sub = data.subtype;
+
+                    // Só processa passos de raciocínio se o RAG estiver ON (cont existe)
+                    if (cont) {
+                        if (sub === 'decomposing' || sub === 'step_start') {
+                            const id = sub === 'decomposing' ? 'dec' : `step_${data.step}`;
+                            const text = sub === 'decomposing' ? 'Decomposing...' : `Step ${data.step}: ${data.question}`;
+                            const el = this.createStep(id, text);
+                            stepsContainer.appendChild(el);
+                            stepsElements[id] = el;
+                        } 
+                        else if (sub === 'no_docs') {
+                            const id = `step_${data.step}`;
+                            const el = stepsElements[id];
+                            if (el) {
+                                const node = el.querySelector('.step-node');
+                                node.innerHTML = '!'; el.className = 'step-item warning'; 
+                                const content = el.querySelector('.step-content');
+                                content.style.display = 'block';
+                                content.innerHTML = '<span style="color:var(--warning)">No relevant documents found.</span>';
+                            }
+                        }
+                        else if (['decomposed','reasoning'].includes(sub)) {
+                            const id = sub === 'decomposed' ? 'dec' : `step_${data.step}`;
+                            const el = stepsElements[id];
+                            if(el) {
+                                el.className = 'step-item completed';
+                                el.querySelector('.step-node').innerHTML = `<span class="check-icon">✓</span>`;
+                                const content = el.querySelector('.step-content');
+                                content.style.display = 'block';
+                                if(data.steps) content.innerHTML = `<ul>${data.steps.map(s=>`<li>${s}</li>`).join('')}</ul>`;
+                                if(data.reasoning) MarkdownUtils.renderContent(data.reasoning, content);
+                            }
+                        }
+                        else if (sub === 'finalizing') {
+                            const id = 'finalizing';
+                            const el = this.createStep(id, "Generating final answer...");
+                            stepsContainer.appendChild(el);
+                            stepsElements[id] = el;
+                        }
+                    }
+
+                    if (sub === 'done' || sub === 'final') {
+                        if(statusEl) statusEl.classList.remove('active');
+                        es.close(); 
+                        
+                        if (cont && stepsElements['finalizing']) {
+                            const finEl = stepsElements['finalizing'];
+                            finEl.querySelector('.step-title').innerText = "Final Answer Generated";
+                            finEl.className = 'step-item completed';
+                            finEl.querySelector('.step-node').innerHTML = `<span class="check-icon">✓</span>`;
+                        }
+
+                        if(data.answer) {
+                            const f = document.createElement('div'); f.className = 'final-answer';
+                            MarkdownUtils.renderContent(data.answer, f);
+                            botRow.appendChild(f);
+                            
+                            if (cont) {
+                                const box = cont.querySelector('.thought-box');
+                                box.classList.remove('expanded'); box.classList.add('compact');
+                            }
+                            
+                            // SAVE BOT RESPONSE TO HISTORY
+                            // Guardamos reasoning como null se RAG estiver off
+                            this.saveToHistory({ 
+                                type: 'bot', 
+                                answer: data.answer, 
+                                reasoning: cont ? stepsContainer.innerHTML : null 
+                            });
+                        }
+                    }
+
+                    if (thoughtBox) thoughtBox.scrollTop = thoughtBox.scrollHeight;
+                    DOM.chatWindow.scrollTop = DOM.chatWindow.scrollHeight;
+                }
+            };
+            
+            es.onerror = () => { 
+                es.close(); 
+                if(statusEl) {
+                    statusEl.innerHTML = `<span style="color:var(--danger)">Connection Error</span>`; 
+                    statusEl.classList.remove('active'); 
+                }
+            };
+        }
+    };
+
+    (function() { 
+        let dragging = false; 
+        DOM.dragbar.addEventListener('mousedown', (e) => { 
+            dragging = true; document.body.style.cursor = 'col-resize'; DOM.pdfSidebar.style.transition = 'none'; 
+            window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp); 
+        }); 
+        function onMove(e) { if(!dragging) return; DOM.pdfSidebar.style.width = Math.max(200, window.innerWidth - e.clientX) + 'px'; DOM.pdfSidebar.classList.add('active'); } 
+        function onUp() { dragging = false; document.body.style.cursor = ''; DOM.pdfSidebar.style.transition = 'width 0.6s cubic-bezier(0.19, 1, 0.22, 1)'; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); } 
+    })();
+
+    // Initialize Markdown and UI (including History Load)
+    MarkdownUtils.init(); 
+    KBManager.init(); 
+    ChatUI.init(); // <--- Loads History
+    
+    DOM.userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') ChatUI.sendMessage(); });
+
+</script>
+</body>
+</html>
