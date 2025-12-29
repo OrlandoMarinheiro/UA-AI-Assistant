@@ -1,4 +1,4 @@
-# FAA Project – Conversational AI Chatbot
+# FAA Project – UA AI Assistant
 
 This project implements a conversational AI chatbot designed to answer questions based on a closed knowledge base related to the *Fundamentals of Machine Learning* course.  
 It combines **Retrieval-Augmented Generation (RAG)** with **Chain-of-Thought Augmented Generation (CAG)** and supports **multimodal documents** using ColPali and Qdrant.
