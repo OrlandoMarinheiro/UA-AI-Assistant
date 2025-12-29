@@ -21,6 +21,8 @@ class ChainOfThoughtRAG:
         self.without_RAG_history = []
         self.history_length = 3
 
+
+    # extract a specific page from a PDF and convert to base64 image URL
     def extract_page_as_base64(self, pdf_path, page_number):
         if not pdf_path or not os.path.exists(pdf_path):
             raise FileNotFoundError(f"PDF not found: {pdf_path}")
@@ -46,6 +48,7 @@ class ChainOfThoughtRAG:
         image_url = f"data:image/jpeg;base64,{image_b64}"
         return image_url
     
+    # save or get description from sqlite database
     def _save_or_get_description(self, id, doc_path=None, page=None):
 
         db_path = "descriptions.sqlite"
@@ -139,7 +142,6 @@ class ChainOfThoughtRAG:
     
 
     def decompose_question(self, complex_question):
-        # Implement decomposition logic here
         
         decomposed_prompt = f"""
         Decompose the following complex user question into a concise list of atomic English sub-questions that can be answered independently. 
@@ -159,7 +161,7 @@ class ChainOfThoughtRAG:
 
         return self._llm_decompose(decomposed_prompt)
 
-    
+    # function to decompose question into sub-questions
     def _llm_decompose(self, prompt):
 
         completions = self.client.chat.completions.create(
@@ -187,7 +189,7 @@ class ChainOfThoughtRAG:
                 
         return steps
 
-
+    # reason for a specific step given retrieved documents
     def reason_step(self, step, retrieved_docs):
         step_reasoning = f"""
         Based on the following retrieved documents, provide a detailed reasoning to answer the question.

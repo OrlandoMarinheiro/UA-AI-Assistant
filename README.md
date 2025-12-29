@@ -112,6 +112,12 @@ This ensures consistency between stored embeddings and the original documents.
 docker-compose restart qdrant
 ```
 ---
+## Indexing a New Document
+To index a document, simply select **My Knowledge Base** in the left sidebar, drag and drop the file(s), and click **Start Indexing**.  
+The indexing queue will then start processing the documents.
+
+---
+
 ## Obtain Groq API Key
 
 Create a Groq API key at:
@@ -155,7 +161,8 @@ Once running, the application will start the chatbot interface and allow documen
 - `docs/` must always match the documents used to build the current vector collection.
 - Token usage depends on the limits imposed by the Groq API.
 - Running ColPali search and indexing on CPU takes a lot of time, so it is strongly recommended to run it on a GPU.
-- All the tests were done with an i5-13450HX, 16 GB RAM, and an RTX 4060.
+- All the tests were done with an i5-13450HX, 16 GB RAM, and an RTX 4060 8GB VRAM.
+- Depending on your VRAM, you may need to adjust the BATCH_SIZE in `app.py`. For 8GB of GPU memory, a BATCH_SIZE of 4–6 works well
 ---
 
 ## UA AI Assistant Demo

@@ -1,0 +1,8 @@
+
+*.zip
+
+qdrant_storage/
+docs/
+__pycache__/
+
+.env/
