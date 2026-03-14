@@ -5,6 +5,9 @@ It combines **Retrieval-Augmented Generation (RAG)** with **Chain-of-Thought Aug
 
 ---
 
+## UA AI Assistant Demo
+[Chatbot answer demo](https://youtu.be/qwpDaayPBAs)
+
 ## Project Structure
 
 ```
@@ -164,9 +167,6 @@ Once running, the application will start the chatbot interface and allow documen
 - All the tests were done with an i5-13450HX, 16 GB RAM, and an RTX 4060 8GB VRAM.
 - Depending on your VRAM, you may need to adjust the BATCH_SIZE in `app.py`. For 8GB of GPU memory, a BATCH_SIZE of 4–6 works well
 ---
-
-## UA AI Assistant Demo
-[Chatbot answer demo](https://youtu.be/qwpDaayPBAs)
 
 
 ## Authors
